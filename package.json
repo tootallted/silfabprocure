@@ -1,0 +1,14 @@
+{
+  "name": "silfabprocure",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Silfab Procure purchase orders: static GitHub Pages front end on a Supabase (Postgres) back end",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "serve": "npx -y http-server@14.1.1 -p 8490 -c-1 ."
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.2.17"
+  }
+}

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Silfab Procure</title>
+  <meta name="description" content="Silfab Procure: purchase orders with full version history and point-in-time views.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232d5bd7'/%3E%3Cpath d='M9 8h10l4 4v12H9z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/%3E%3Cpath d='M12.5 16h7M12.5 20h7' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">SP</span>
+      <h1>Silfab Procure <span class="h1-sub">Purchase orders</span></h1>
+    </div>
+    <div class="topbar-right">
+      <label class="switch" title="Hide superseded header/line versions and removed lines">
+        <input type="checkbox" id="hideRevisions">
+        <span class="track"><span class="thumb"></span></span>
+        <span>Hide non-current revisions</span>
+      </label>
+      <span id="auditStatus" class="audit-status"></span>
+      <span id="userBox" class="user-box"></span>
+    </div>
+  </header>
+
+  <section class="timebar" id="timebar" aria-label="Point-in-time view">
+    <div class="timebar-info">
+      <span class="mode-pill" id="modePill">Latest</span>
+      <span class="asof-text" id="asOfText"></span>
+    </div>
+    <div class="timebar-controls">
+      <button class="icon-btn" id="tPrev" title="Step back to the previous saved change" aria-label="Previous change">&#8249;</button>
+      <div class="slider">
+        <div class="ticks" id="ticks"></div>
+        <input type="range" id="tRange" aria-label="View data as of time" min="0" max="1" value="1" step="1">
+        <div class="slider-scale"><span id="scaleMin"></span><span>Now</span></div>
+      </div>
+      <button class="icon-btn" id="tNext" title="Step forward to the next saved change" aria-label="Next change">&#8250;</button>
+      <input type="datetime-local" id="tInput" step="1" aria-label="As-of date and time">
+      <button class="btn" id="tLatest">Back to latest</button>
+    </div>
+  </section>
+
+  <main class="layout">
+    <aside class="nav" aria-label="Purchase orders">
+      <div class="nav-head">
+        <input type="search" id="search" placeholder="Search PO # or name" aria-label="Search purchase orders">
+        <button class="btn primary" id="newPo">+ New PO</button>
+      </div>
+      <div class="nav-list" id="poList"></div>
+      <div class="nav-foot" id="listFoot"></div>
+    </aside>
+    <section class="detail" id="detail" aria-live="polite"></section>
+  </main>
+
+  <div class="gate" id="gate" hidden>
+    <div class="gate-card" role="dialog" aria-modal="true" aria-label="Sign in"></div>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"
+          integrity="sha384-GFr3yTh5lJznCbZfpTtXnwboFsxqtTQoeTZCRHhE0579KrRmlCzen5AA8ohaB5ug" crossorigin="anonymous"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
