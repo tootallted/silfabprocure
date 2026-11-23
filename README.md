@@ -34,7 +34,7 @@ The site and its data run on one Windows PC. [`server/server.js`](server/server.
 The page is published at https://tootallted.github.io/silfabprocure/ and in the Teams app. Its data calls reach this PC through a Cloudflare quick tunnel:
 
 1. Start the server: `npm start`.
-2. Start the tunnel: `npm run tunnel`. A quick tunnel gets a new `*.trycloudflare.com` address on each start, so the script writes it into `config.js` and pushes it. GitHub Pages picks it up in about a minute.
+2. Start the tunnel: `npm run tunnel`. A quick tunnel gets a new `*.trycloudflare.com` address on each start, so the script writes it into `tunnel.json` and pushes it. GitHub Pages picks it up in about a minute.
 
 Both windows must stay open, and the PC must stay on.
 

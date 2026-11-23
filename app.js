@@ -39,7 +39,21 @@
   // On the PC that runs the server, talk to it directly; elsewhere (GitHub Pages, Teams) go
   // through the tunnel address in config.js.
   const onServerPc = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-  const API_BASE = onServerPc ? '' : String((window.SILFAB_CONFIG || {}).apiUrl || '').replace(/\/+$/, '');
+  let API_BASE = onServerPc ? '' : String((window.SILFAB_CONFIG || {}).apiUrl || '').replace(/\/+$/, '');
+
+  // The tunnel's address changes whenever it restarts, and tools/start-tunnel.ps1 publishes the
+  // current one in tunnel.json. Fetch it fresh on every load so a cached copy never points at a
+  // tunnel that no longer exists.
+  async function loadApiBase() {
+    if (onServerPc) return;
+    try {
+      const r = await fetch(`tunnel.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (r.ok) {
+        const { apiUrl } = await r.json();
+        if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(apiUrl || '')) API_BASE = apiUrl;
+      }
+    } catch { /* keep the config.js value */ }
+  }
 
   // Microsoft sign-in. Inside Teams, Teams hands over a token for this app (SSO, no prompt).
   // In a normal browser, MSAL signs in with a redirect to Microsoft and back.
@@ -53,6 +67,7 @@
 
     async init() {
       if (this.ready) return;
+      await loadApiBase();
       let res;
       try { res = await fetch(`${API_BASE}/api/auth-config`); } catch { res = null; }
       if (!res || !res.ok) throw new Error('Could not reach the Silfab Procure server. Check that it is running.');

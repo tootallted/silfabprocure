@@ -1,6 +1,7 @@
 ﻿// Where the page finds the Silfab Procure server (server/server.js).
-// tools/start-tunnel.ps1 rewrites apiUrl with the current Cloudflare tunnel address each time it
-// starts. On the PC itself (http://localhost:8490) the page ignores it and uses the local server.
+// Normally leave apiUrl empty: on this PC the page uses the local server, and elsewhere it reads
+// the current Cloudflare tunnel address from tunnel.json, which tools/start-tunnel.ps1 publishes.
+// Set apiUrl only to force a fixed server address.
 window.SILFAB_CONFIG = {
-  apiUrl: 'https://supplements-doom-neon-tampa.trycloudflare.com',
+  apiUrl: '',
 };
