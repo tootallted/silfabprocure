@@ -36,27 +36,115 @@
   // ---------- backend: local Silfab Procure server ----------
   // Every read and write goes through the po_* database functions (supabase/schema.sql),
   // called through server/server.js. The tables themselves are not reachable from the browser.
-  const API_BASE = String((window.SILFAB_CONFIG || {}).apiUrl || '').replace(/\/+$/, ''); // '' = same server as the page
+  // On the PC that runs the server, talk to it directly; elsewhere (GitHub Pages, Teams) go
+  // through the tunnel address in config.js.
+  const onServerPc = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const API_BASE = onServerPc ? '' : String((window.SILFAB_CONFIG || {}).apiUrl || '').replace(/\/+$/, '');
+
+  // Microsoft sign-in. Inside Teams, Teams hands over a token for this app (SSO, no prompt).
+  // In a normal browser, MSAL signs in with a redirect to Microsoft and back.
+  const auth = {
+    ready: false,
+    enabled: false,
+    inTeams: false,
+    cfg: null,
+    msal: null,
+    account: null,
+
+    async init() {
+      if (this.ready) return;
+      let res;
+      try { res = await fetch(`${API_BASE}/api/auth-config`); } catch { res = null; }
+      if (!res || !res.ok) throw new Error('Could not reach the Silfab Procure server. Check that it is running.');
+      this.cfg = await res.json();
+      this.enabled = !!this.cfg.enabled;
+      if (this.enabled) {
+        this.inTeams = await this.startTeams();
+        if (!this.inTeams) await this.startMsal();
+      }
+      this.ready = true;
+    },
+
+    async startTeams() {
+      const framed = window.parent !== window || !!window.nativeInterface;
+      if (!framed || !window.microsoftTeams) return false;
+      try {
+        await Promise.race([
+          window.microsoftTeams.app.initialize(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+        ]);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    async startMsal() {
+      if (!window.msal) throw new Error('The Microsoft sign-in library did not load.');
+      this.msal = new window.msal.PublicClientApplication({
+        auth: {
+          clientId: this.cfg.clientId,
+          authority: `https://login.microsoftonline.com/${this.cfg.tenantId}`,
+          redirectUri: this.homeUrl(),
+        },
+        cache: { cacheLocation: 'localStorage' },
+      });
+      await this.msal.initialize();
+      const r = await this.msal.handleRedirectPromise();
+      this.account = r?.account || this.msal.getAllAccounts()[0] || null;
+    },
+
+    async token() {
+      if (!this.enabled) return null;
+      if (this.inTeams) {
+        try {
+          return await window.microsoftTeams.authentication.getAuthToken();
+        } catch (e) {
+          throw Object.assign(new Error(String(e?.message || e)), { status: 401 });
+        }
+      }
+      if (!this.account) return null;
+      try {
+        const r = await this.msal.acquireTokenSilent({ scopes: [this.cfg.scope], account: this.account });
+        return r.accessToken;
+      } catch {
+        return null; // the server answers 401 and the page offers to sign in again
+      }
+    },
+
+    // The page's own folder, e.g. https://tootallted.github.io/silfabprocure/ or http://localhost:8490/.
+    // Each must be registered as a single-page-application redirect URI in Entra ID.
+    homeUrl() { return location.origin + location.pathname.replace(/[^/]*$/, ''); },
+    canSignOut() { return this.enabled && !this.inTeams && !!this.account; },
+    signIn() { return this.msal.loginRedirect({ scopes: [this.cfg.scope], prompt: 'select_account' }); },
+    signOut() {
+      if (this.msal) this.msal.logoutRedirect({ account: this.account, postLogoutRedirectUri: this.homeUrl() });
+    },
+  };
 
   async function rpc(fn, args = {}) {
     let res;
     try {
+      const token = await auth.token();
       res = await fetch(`${API_BASE}/api/rpc/${fn}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(args),
       });
-    } catch {
-      const e = new Error('Could not reach the Silfab Procure server. Check that it is running.');
-      e.status = 0;
-      throw e;
+    } catch (e) {
+      if (e.status === 401) { showGate('signin', e.message); throw e; }
+      const err = new Error('Could not reach the Silfab Procure server. Check that it is running.');
+      err.status = 0;
+      throw err;
     }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       const e = new Error(body.message || `Request failed (${res.status})`);
       e.status = res.status;
       e.data = body.details ? { entered_at: body.details } : null;
-      if (e.status === 401 || e.status === 403) showGate('denied', e.message);
+      // body.code 'auth' = the server could not verify a Microsoft sign-in; otherwise it is the database's access check.
+      if (e.status === 401) showGate(auth.enabled && body.code === 'auth' ? 'signin' : 'denied', e.message);
+      if (e.status === 403) showGate('denied', e.message);
       throw e;
     }
     return body.data;
@@ -877,8 +965,9 @@
   }
 
   // ---------- access check ----------
-  // The local server decides who you are (SILFAB_USER_EMAIL in server/.env); the database
-  // checks that email against procure.app_user.
+  // With Microsoft sign-in on, the server reads your email from a verified Microsoft token;
+  // without it, the server uses SILFAB_USER_EMAIL. Either way the database checks that email
+  // against procure.app_user.
   let booted = false;
 
   function showGate(kind, message = '') {
@@ -892,7 +981,16 @@
         <button class="btn primary" data-gate="retry">Try again</button>`,
       denied: `<h2>No access</h2>
         <p class="gate-msg">${esc(message || 'Your account is not authorized for this app.')}</p>
-        <button class="btn" data-gate="retry">Try again</button>`,
+        <button class="btn" data-gate="retry">Try again</button>
+        ${auth.canSignOut() ? '<button class="link" data-gate="logout">Sign in as someone else</button>' : ''}`,
+      signin: auth.inTeams
+        ? `<h2>Couldn't sign you in</h2>
+          <p class="gate-msg">Teams could not get a sign-in for Silfab Procure${message ? ` (${esc(message)})` : ''}. Ask an administrator to check the app's Microsoft Entra ID setup.</p>
+          <button class="btn primary" data-gate="retry">Try again</button>`
+        : `<h2>Sign in</h2>
+          <p class="gate-msg">Use your work Microsoft account.</p>
+          <button class="btn primary" data-gate="login">Sign in with Microsoft</button>
+          ${message ? `<p class="gate-err" role="alert">${esc(message)}</p>` : ''}`,
     };
     gate.querySelector('.gate-card').innerHTML = `<div class="gate-brand"><span class="logo">SP</span><span>Silfab Procure</span></div>
       ${views[kind] || ''}`;
@@ -904,17 +1002,27 @@
   }
 
   function renderUser(email) {
-    $('#userBox').innerHTML = email ? `<span class="user-email" title="Saves are recorded as this person">${esc(email)}</span>` : '';
+    $('#userBox').innerHTML = email
+      ? `<span class="user-email" title="Saves are recorded as this person">${esc(email)}</span>${auth.canSignOut() ? '<button class="btn tiny" id="signOut">Sign out</button>' : ''}`
+      : '';
   }
 
   async function checkAccess() {
     showGate('loading');
+    try {
+      await auth.init();
+    } catch (e) {
+      // MSAL errors (from the Microsoft sign-in redirect) carry an errorCode; anything else means the server is down.
+      showGate(e.errorCode ? 'signin' : 'offline', e.message);
+      return;
+    }
+    if (auth.enabled && !auth.inTeams && !auth.account) { showGate('signin'); return; }
     let who;
     try {
       who = await backend.whoami();
     } catch (e) {
-      showGate('offline', e.message);
-      return;
+      if (e.status !== 401 && e.status !== 403) showGate('offline', e.message);
+      return; // rpc() has already shown the sign-in or no-access screen
     }
     renderUser(who.email);
     if (!who.allowed) {
@@ -938,7 +1046,14 @@
 
   function initAuth() {
     $('#gate').addEventListener('click', (e) => {
-      if (e.target.closest('[data-gate="retry"]')) checkAccess();
+      const b = e.target.closest('[data-gate]');
+      if (!b) return;
+      if (b.dataset.gate === 'retry') checkAccess();
+      if (b.dataset.gate === 'login') auth.signIn().catch((err) => showGate('signin', err.message));
+      if (b.dataset.gate === 'logout') auth.signOut();
+    });
+    $('#userBox').addEventListener('click', (e) => {
+      if (e.target.id === 'signOut' && confirmDiscard()) auth.signOut();
     });
     checkAccess();
   }

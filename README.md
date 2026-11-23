@@ -29,11 +29,26 @@ The site and its data run on one Windows PC. [`server/server.js`](server/server.
 4. **Schema**: as `silfab_app`, run `db/auth-stubs.sql` and then `supabase/schema.sql`. Both are safe to re-run after updates.
 5. **Start**: run `npm install`, then `npm start`, and open http://localhost:8490/.
 
+## Public access (GitHub Pages, Teams)
+
+The page is published at https://tootallted.github.io/silfabprocure/ and in the Teams app. Its data calls reach this PC through a Cloudflare quick tunnel:
+
+1. Start the server: `npm start`.
+2. Start the tunnel: `npm run tunnel`. A quick tunnel gets a new `*.trycloudflare.com` address on each start, so the script writes it into `config.js` and pushes it. GitHub Pages picks it up in about a minute.
+
+Both windows must stay open, and the PC must stay on.
+
 ## Who can use it
 
-The server listens on this PC only (`127.0.0.1`) and has no sign-in. Anyone using a browser on this PC acts as `SILFAB_USER_EMAIL`. Before other people or Microsoft Teams can reach it, it needs a sign-in and HTTPS hosting.
+People sign in with their Microsoft 365 work account. Inside Teams this happens automatically. The server checks every request's Microsoft Entra ID token (`AZURE_TENANT_ID` and `AZURE_CLIENT_ID` in `server/.env`) and uses the email in it. The app registration needs:
 
-The access list is still enforced. To add or remove someone:
+- SPA redirect URIs `https://tootallted.github.io/silfabprocure/` and `http://localhost:8490/`
+- Application ID URI `api://tootallted.github.io/<client ID>`, with an `access_as_user` scope
+- The Teams clients `1fec8e78-bce4-4aaf-ab1b-5451cc387264` and `5e3ce6c0-2b1f-4285-8d4b-75ee78787346` authorized for that scope
+
+If `AZURE_*` is left empty, the server works on this PC only, with no sign-in, and records every save as `SILFAB_USER_EMAIL`.
+
+The access list decides who gets in. To add or remove someone:
 
 ```sql
 insert into procure.app_user (email) values ('person@company.com');

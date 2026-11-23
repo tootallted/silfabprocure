@@ -6,12 +6,16 @@
   "type": "module",
   "scripts": {
     "start": "node server/server.js",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "tunnel": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/start-tunnel.ps1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.2.17"
   },
   "dependencies": {
+    "@azure/msal-browser": "^3.28.1",
+    "@microsoft/teams-js": "^2.34.0",
+    "jose": "^5.9.6",
     "pg": "^8.13.1"
   }
 }
