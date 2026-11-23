@@ -1,5 +1,6 @@
-// Where the page finds the Silfab Procure server (server/server.js).
-// Leave apiUrl empty when the server also serves this page, which is the normal setup.
+﻿// Where the page finds the Silfab Procure server (server/server.js).
+// tools/start-tunnel.ps1 rewrites apiUrl with the current Cloudflare tunnel address each time it
+// starts. On the PC itself (http://localhost:8490) the page ignores it and uses the local server.
 window.SILFAB_CONFIG = {
-  apiUrl: '',
+  apiUrl: 'https://generated-briefs-beauty-dosage.trycloudflare.com',
 };
