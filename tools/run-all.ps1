@@ -34,6 +34,19 @@ function Start-Tunnel {
 }
 
 Log 'Watcher started.'
+
+# Stopping the scheduled task ends this watcher but not the processes it started. Clean up any
+# server or tunnel left from an earlier run so there is exactly one of each.
+$leftovers = Get-CimInstance Win32_Process | Where-Object {
+  ($_.Name -eq 'node.exe' -and $_.CommandLine -match 'server[\\/]server\.js') -or
+  ($_.Name -eq 'cloudflared.exe' -and $_.CommandLine -match "localhost:$port")
+}
+foreach ($p in $leftovers) {
+  Log "Stopping leftover $($p.Name) (process $($p.ProcessId))."
+  Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+}
+if ($leftovers) { Start-Sleep -Seconds 2 }
+
 $server = $null
 $tunnel = $null
 while ($true) {

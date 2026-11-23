@@ -31,12 +31,17 @@ The site and its data run on one Windows PC. [`server/server.js`](server/server.
 
 ## Public access (GitHub Pages, Teams)
 
-The page is published at https://tootallted.github.io/silfabprocure/ and in the Teams app. Its data calls reach this PC through a Cloudflare quick tunnel:
+The page is published at https://tootallted.github.io/silfabprocure/ and in the Teams app. Its data calls reach this PC through a Cloudflare quick tunnel. A quick tunnel gets a new `*.trycloudflare.com` address on each start, so the tunnel script writes it into `tunnel.json` and pushes it. The page reads `tunnel.json` fresh on every load, and GitHub Pages picks up the change in about a minute.
 
-1. Start the server: `npm start`.
-2. Start the tunnel: `npm run tunnel`. A quick tunnel gets a new `*.trycloudflare.com` address on each start, so the script writes it into `tunnel.json` and pushes it. GitHub Pages picks it up in about a minute.
+**Normally this starts by itself.** The "Silfab Procure" scheduled task runs [`tools/run-all.ps1`](tools/run-all.ps1) one minute after Windows boots, before anyone signs in. The script starts the server and the tunnel, checks them every 15 seconds, and restarts either one if it stops. Logs are in `local\logs`.
 
-Both windows must stay open, and the PC must stay on.
+- Set it up once, as administrator: `tools\install-autostart.ps1`. It asks for your Windows password, so the task can run as you and push to GitHub.
+- To restart everything: `Stop-ScheduledTask 'Silfab Procure'; Start-ScheduledTask 'Silfab Procure'`
+- To remove it: `Unregister-ScheduledTask -TaskName 'Silfab Procure'`
+
+To run things by hand instead, use `npm start` and `npm run tunnel` in two windows, and keep both open.
+
+The PC must be on and awake for the site to work.
 
 ## Who can use it
 
