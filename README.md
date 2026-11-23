@@ -2,9 +2,9 @@
 
 Purchase orders with a full version history and point-in-time views.
 
-**Home page:** https://tootallted.github.io/silfabprocure/
+**Open it:** http://localhost:8490/ on the PC that runs the server.
 
-All work with purchase order data happens on that page. The site is static and hosted on GitHub Pages. Data lives in a Supabase (Postgres) database, and the database only accepts reads and writes through the `po_*` functions in [`supabase/schema.sql`](supabase/schema.sql). A request must come from a signed-in user whose email is on the access list.
+The site and its data run on one Windows PC. [`server/server.js`](server/server.js) serves the page and talks to a local PostgreSQL 17 database named `silfabprocure`. The database only accepts reads and writes through the `po_*` functions in [`supabase/schema.sql`](supabase/schema.sql). That folder keeps its name from when the data lived on Supabase. The same file runs unchanged on local PostgreSQL, with [`db/auth-stubs.sql`](db/auth-stubs.sql) standing in for Supabase's sign-in functions.
 
 ## What it does
 
@@ -23,32 +23,27 @@ All work with purchase order data happens on that page. The site is static and h
 
 ## One-time setup
 
-1. **Supabase project**: create one at https://supabase.com (the free tier is fine).
-2. **Database**: open *SQL Editor*, paste the contents of `supabase/schema.sql`, and run it. It is safe to re-run after updates.
-3. **Auth settings** (*Authentication → Sign In / Providers* and *URL Configuration*):
-   - Turn **off** "Allow new users to sign up".
-   - Set **Site URL** to `https://tootallted.github.io/silfabprocure/` and add the same URL under **Redirect URLs**.
-4. **Connect the site**: copy *Project URL* and the *anon public* key (*Project Settings → API*) into `config.js`.
-5. **GitHub Pages**: in repo *Settings → Pages*, choose *Deploy from a branch*, then `main` and `/ (root)`.
+1. **PostgreSQL 17**, installed as a Windows service and listening on `localhost:5432`.
+2. **Settings**: `server/.env` (not committed) holds the database connection and `SILFAB_USER_EMAIL`. Every save is recorded as that email, and it must be on the access list.
+3. **Database and account**: run `tools/setup-local-db.ps1`. It asks for the local `postgres` admin password, then creates the `silfab_app` account and the `silfabprocure` database. The first time it ran, it also copied the old data out of Supabase into `local/` (not committed).
+4. **Schema**: as `silfab_app`, run `db/auth-stubs.sql` and then `supabase/schema.sql`. Both are safe to re-run after updates.
+5. **Start**: run `npm install`, then `npm start`, and open http://localhost:8490/.
 
-## Giving someone access
+## Who can use it
 
-Both steps are required:
+The server listens on this PC only (`127.0.0.1`) and has no sign-in. Anyone using a browser on this PC acts as `SILFAB_USER_EMAIL`. Before other people or Microsoft Teams can reach it, it needs a sign-in and HTTPS hosting.
 
-1. Supabase *Authentication → Users → Add user → Send invitation* to their email.
-2. In the SQL Editor, run:
-   ```sql
-   insert into procure.app_user (email) values ('person@company.com');
-   ```
+The access list is still enforced. To add or remove someone:
 
-To remove access, delete the row from `procure.app_user`. Their history stays in the audit trail.
-
-Supabase's built-in email sender is rate-limited to a few emails per hour. For regular use, set up custom SMTP under *Authentication → Emails*.
+```sql
+insert into procure.app_user (email) values ('person@company.com');
+delete from procure.app_user where email = 'person@company.com';  -- their history stays in the audit trail
+```
 
 ## Development
 
 ```bash
 npm install
-npm test        # runs schema.sql in an in-process Postgres (PGlite) and tests every rule above
-npm run serve   # serves the site at http://localhost:8490 (it uses whatever config.js points to)
+npm test     # runs schema.sql in an in-process Postgres (PGlite) and tests every rule above
+npm start    # http://localhost:8490
 ```

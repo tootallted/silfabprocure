@@ -330,6 +330,5 @@ body.gated .topbar-right > :not(.user-box) { visibility: hidden; }
 .gate-form input { padding: 9px 11px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--panel); }
 .gate-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .gate-form .btn { padding: 9px 12px; }
-.gate-err { color: var(--danger); font-size: 13px; margin: 12px 0 0; }
-.gate code { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); padding: 1px 4px; border-radius: 4px; }
+.gate-err { color: var(--danger); font-size: 13px; margin: 12px 0 0; }.gate code { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); padding: 1px 4px; border-radius: 4px; }
 @media (max-width: 900px) { .h1-sub { display: none; } }

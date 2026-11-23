@@ -33,30 +33,33 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
   };
 
-  // ---------- backend: Supabase ----------
-  // Every read and write goes through the po_* database functions (supabase/schema.sql).
-  // The tables themselves are not reachable from the browser.
-  const CONFIG = window.SILFAB_CONFIG || {};
-  const configured = /^(https:\/\/[^/]+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?)/.test(CONFIG.supabaseUrl || '') && !!CONFIG.supabaseAnonKey
-    && !/YOUR_/.test(`${CONFIG.supabaseUrl}${CONFIG.supabaseAnonKey}`);
-  const sb = configured && window.supabase
-    ? window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' },
-    })
-    : null;
+  // ---------- backend: local Silfab Procure server ----------
+  // Every read and write goes through the po_* database functions (supabase/schema.sql),
+  // called through server/server.js. The tables themselves are not reachable from the browser.
+  const API_BASE = String((window.SILFAB_CONFIG || {}).apiUrl || '').replace(/\/+$/, ''); // '' = same server as the page
 
-  async function rpc(fn, args) {
-    const { data, error, status } = await sb.rpc(fn, args);
-    if (error) {
-      const m = /^PT(\d{3})$/.exec(error.code || '');
-      const e = new Error(error.message || 'Request failed');
-      e.status = m ? Number(m[1]) : status || 500;
-      e.data = error.details ? { entered_at: error.details } : null;
-      if (e.status === 401) showGate('signin', 'Your session ended. Sign in again.');
-      if (e.status === 403) showGate('denied', e.message);
+  async function rpc(fn, args = {}) {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/rpc/${fn}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(args),
+      });
+    } catch {
+      const e = new Error('Could not reach the Silfab Procure server. Check that it is running.');
+      e.status = 0;
       throw e;
     }
-    return data;
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const e = new Error(body.message || `Request failed (${res.status})`);
+      e.status = res.status;
+      e.data = body.details ? { entered_at: body.details } : null;
+      if (e.status === 401 || e.status === 403) showGate('denied', e.message);
+      throw e;
+    }
+    return body.data;
   }
 
   const backend = {
@@ -873,35 +876,26 @@
     initAuth();
   }
 
-  // ---------- sign-in ----------
+  // ---------- access check ----------
+  // The local server decides who you are (SILFAB_USER_EMAIL in server/.env); the database
+  // checks that email against procure.app_user.
   let booted = false;
 
   function showGate(kind, message = '') {
     const gate = $('#gate');
     document.body.classList.add('gated');
     gate.hidden = false;
-    const email = esc(prefs.get('po.lastEmail', ''));
     const views = {
       loading: '<p class="gate-msg">Loading…</p>',
-      config: `<h2>Not connected yet</h2>
-        <p class="gate-msg">This site has no database configured. Set the Supabase URL and anon key in <code>config.js</code>.</p>`,
-      signin: `<h2>Sign in</h2>
-        <p class="gate-msg">We'll email you a one-time sign-in link.</p>
-        <form id="signinForm" class="gate-form">
-          <input type="email" id="signinEmail" required autocomplete="email" placeholder="you@company.com" value="${email}" aria-label="Email address">
-          <button class="btn primary" type="submit" id="signinBtn">Email me a sign-in link</button>
-        </form>`,
-      sent: `<h2>Check your email</h2>
-        <p class="gate-msg">We sent a sign-in link to <b>${esc(message)}</b>. Open it in this browser to continue.</p>
-        <button class="link" data-gate="signin">Use a different email</button>`,
+      offline: `<h2>Can't reach the server</h2>
+        <p class="gate-msg">${esc(message || 'The Silfab Procure server is not responding.')}</p>
+        <button class="btn primary" data-gate="retry">Try again</button>`,
       denied: `<h2>No access</h2>
         <p class="gate-msg">${esc(message || 'Your account is not authorized for this app.')}</p>
-        <button class="btn" data-gate="signout">Sign out</button>`,
+        <button class="btn" data-gate="retry">Try again</button>`,
     };
-    const showErr = kind !== 'sent' && kind !== 'denied' && message;
     gate.querySelector('.gate-card').innerHTML = `<div class="gate-brand"><span class="logo">SP</span><span>Silfab Procure</span></div>
-      ${views[kind] || ''}${showErr ? `<p class="gate-err">${esc(message)}</p>` : ''}`;
-    $('#signinEmail')?.focus();
+      ${views[kind] || ''}`;
   }
 
   function hideGate() {
@@ -910,38 +904,25 @@
   }
 
   function renderUser(email) {
-    $('#userBox').innerHTML = email
-      ? `<span class="user-email" title="Signed in">${esc(email)}</span><button class="btn tiny" id="signOut">Sign out</button>`
-      : '';
+    $('#userBox').innerHTML = email ? `<span class="user-email" title="Saves are recorded as this person">${esc(email)}</span>` : '';
   }
 
-  async function sendLink(email) {
-    const btn = $('#signinBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
-    prefs.set('po.lastEmail', email);
-    const { error } = await sb.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname },
-    });
-    if (error) {
-      const msg = /signups? not allowed|not found|otp_disabled/i.test(error.message)
-        ? `${email} isn't set up for Silfab Procure. Ask an administrator to invite you.`
-        : error.message;
-      showGate('signin', msg);
-    } else {
-      showGate('sent', email);
-    }
-  }
-
-  async function onSignedIn(session) {
-    const who = await backend.whoami().catch(() => null);
-    if (!who) { showGate('signin', 'Could not reach the database. Try again.'); return; }
-    if (!who.allowed) {
-      renderUser(session.user.email);
-      showGate('denied', `${who.email || session.user.email} is not on the access list for Silfab Procure. Ask an administrator to add you.`);
+  async function checkAccess() {
+    showGate('loading');
+    let who;
+    try {
+      who = await backend.whoami();
+    } catch (e) {
+      showGate('offline', e.message);
       return;
     }
     renderUser(who.email);
+    if (!who.allowed) {
+      showGate('denied', who.email
+        ? `${who.email} is not on the access list for Silfab Procure. Ask an administrator to add you.`
+        : 'This server has no user set. Put your email in SILFAB_USER_EMAIL in server/.env and restart the server.');
+      return;
+    }
     hideGate();
     if (booted) return;
     booted = true;
@@ -955,46 +936,11 @@
     }
   }
 
-  async function initAuth() {
-    if (!sb) { showGate('config'); return; }
-    showGate('loading');
-
-    // Errors from an expired or already-used sign-in link arrive in the URL hash.
-    const linkError = new URLSearchParams(location.hash.slice(1)).get('error_description');
-
-    $('#gate').addEventListener('submit', (e) => {
-      if (e.target.id !== 'signinForm') return;
-      e.preventDefault();
-      const email = $('#signinEmail').value.trim().toLowerCase();
-      if (email) sendLink(email);
-    });
+  function initAuth() {
     $('#gate').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-gate]');
-      if (!b) return;
-      if (b.dataset.gate === 'signin') showGate('signin');
-      if (b.dataset.gate === 'signout') sb.auth.signOut();
+      if (e.target.closest('[data-gate="retry"]')) checkAccess();
     });
-    $('#userBox').addEventListener('click', (e) => {
-      if (e.target.id !== 'signOut' || !confirmDiscard()) return;
-      sb.auth.signOut();
-    });
-
-    const { data: { session } } = await sb.auth.getSession();
-    if (/access_token|error_description/.test(location.hash)) {
-      history.replaceState(null, '', location.pathname + location.search);
-    }
-    sb.auth.onAuthStateChange((event, s) => {
-      if (event === 'SIGNED_OUT') {
-        booted = false;
-        state.draft = null;
-        renderUser(null);
-        showGate('signin');
-      } else if (event === 'SIGNED_IN' && s && !booted) {
-        setTimeout(() => onSignedIn(s), 0); // don't call Supabase from inside the auth callback
-      }
-    });
-    if (session) await onSignedIn(session);
-    else showGate('signin', linkError ? `That sign-in link didn't work (${linkError}). Request a new one.` : '');
+    checkAccess();
   }
 
   init();

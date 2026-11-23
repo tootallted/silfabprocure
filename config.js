@@ -1,8 +1,5 @@
-// Supabase connection for this site.
-// Both values are meant to be public: the publishable key only lets a signed-in user
-// on the access list call the po_* database functions. Every access rule lives in
-// supabase/schema.sql.
+// Where the page finds the Silfab Procure server (server/server.js).
+// Leave apiUrl empty when the server also serves this page, which is the normal setup.
 window.SILFAB_CONFIG = {
-  supabaseUrl: 'https://jkncqprktmhwxchgkuvf.supabase.co',
-  supabaseAnonKey: 'sb_publishable_syc6xtFkjnPzFIeYV5v-Vg_XBCvrhbt',
+  apiUrl: '',
 };

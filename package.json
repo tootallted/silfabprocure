@@ -2,13 +2,16 @@
   "name": "silfabprocure",
   "version": "1.0.0",
   "private": true,
-  "description": "Silfab Procure purchase orders: static GitHub Pages front end on a Supabase (Postgres) back end",
+  "description": "Silfab Procure purchase orders: web front end on a local PostgreSQL database",
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "serve": "npx -y http-server@14.1.1 -p 8490 -c-1 ."
+    "start": "node server/server.js",
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.2.17"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
   }
 }
